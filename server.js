@@ -11,6 +11,9 @@ app.use(express.json({ limit: '200kb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
 /** Health check */
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
