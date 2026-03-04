@@ -1,35 +1,45 @@
-const express = require('express');
-const path = require('path');
+const express = require("express");
+const path = require("path");
+const nodemailer = require("nodemailer");
 
-require('dotenv').config();
-const nodemailer = require('nodemailer');
+// Load .env locally (Render ignores .env by default; you set vars in Render dashboard)
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '200kb' }));
+// Body parsers
+app.use(express.json({ limit: "200kb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Static files from /public
+app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
 
-/** Health check */
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+// Health check
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-/** Contact form -> Gmail SMTP (App Password required) */
-app.post('/api/contact', async (req, res) => {
+// Contact form -> SMTP
+app.post("/api/contact", async (req, res) => {
   try {
     const { name, email, subject, message } = req.body || {};
+
     if (!name || !email || !subject || !message) {
-      return res.status(400).json({ error: 'Please fill in all fields.' });
+      return res.status(400).json({ error: "Please fill in all fields." });
     }
 
-    const host = process.env.SMTP_HOST;
+    // Env vars (set these in Render -> Environment)
+    const host = process.env.SMTP_HOST || "smtp.gmail.com";
     const port = Number(process.env.SMTP_PORT || 465);
-    const secure = String(process.env.SMTP_SECURE || 'true') === 'true';
+    const secure = String(process.env.SMTP_SECURE || "true") === "true";
 
-    if (!host || !process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.TO_EMAIL) {
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const toEmail = process.env.TO_EMAIL;
+
+    if (!smtpUser || !smtpPass || !toEmail) {
       return res.status(500).json({
-        error: 'Server email is not configured. Add SMTP_* and TO_EMAIL to .env.'
+        error:
+          "Email not configured. Set SMTP_USER, SMTP_PASS, and TO_EMAIL in environment variables."
       });
     }
 
@@ -37,21 +47,18 @@ app.post('/api/contact', async (req, res) => {
       host,
       port,
       secure, // true for 465, false for 587
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
+      auth: { user: smtpUser, pass: smtpPass }
     });
 
-    const safe = (s) => String(s).replace(/[<>]/g, '');
+    // Basic sanitization
+    const safe = (s) => String(s || "").replace(/[<>]/g, "").trim();
 
     await transporter.sendMail({
-      from: `ChooseYourGameMode <${process.env.SMTP_USER}>`,
-      to: process.env.TO_EMAIL,
+      from: `ChooseYourGameMode <${smtpUser}>`,
+      to: toEmail,
       replyTo: safe(email),
       subject: `[ChooseYourGameMode] ${safe(subject)}`,
-      text:
-`New message from ChooseYourGameMode
+      text: `New message from ChooseYourGameMode
 
 Name: ${safe(name)}
 Email: ${safe(email)}
@@ -64,16 +71,16 @@ ${safe(message)}
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error('Contact error:', err);
-    return res.status(500).json({ error: 'Email failed to send. Check SMTP settings.' });
+    console.error("Contact error:", err);
+    return res.status(500).json({ error: "Email failed to send. Check SMTP settings." });
   }
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// SPA fallback (must be AFTER express.static)
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🎮 ChooseYourGameMode is live!`);
-  console.log(`🌐 Open: http://localhost:${PORT}\n`);
+  console.log(`ChooseYourGameMode running on port ${PORT}`);
 });
